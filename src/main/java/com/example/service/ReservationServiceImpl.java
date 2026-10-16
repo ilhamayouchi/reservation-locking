@@ -1,10 +1,8 @@
 package com.example.service;
 
 import com.example.model.Reservation;
-import javax.persistence.EntityManager;
-import javax.persistence.EntityManagerFactory;
-import javax.persistence.Persistence;
-import javax.persistence.OptimisticLockException;
+
+import javax.persistence.*;
 import java.util.List;
 
 public class ReservationServiceImpl implements ReservationService {
@@ -29,17 +27,16 @@ public class ReservationServiceImpl implements ReservationService {
         EntityManager em = emf.createEntityManager();
         try {
             em.getTransaction().begin();
-            Reservation managed = em.find(Reservation.class, reservation.getId());
-            if (managed == null) {
-                throw new IllegalArgumentException("Réservation non trouvée");
-            }
-            managed.setSalle(reservation.getSalle());
-            managed.setDateDebut(reservation.getDateDebut());
-            managed.setDateFin(reservation.getDateFin());
+            Reservation managed = em.merge(reservation); // compare la version détachée avec la base
             em.getTransaction().commit();
             return managed;
-        } catch (OptimisticLockException e) {
-            em.getTransaction().rollback();
+        } catch (PersistenceException e) { // OptimisticLockException ou RollbackException
+            if (em.getTransaction().isActive()) {
+                em.getTransaction().rollback();
+            }
+            if (e instanceof OptimisticLockException || e.getCause() instanceof OptimisticLockException) {
+                throw new OptimisticLockException("Conflit de version sur la réservation " + reservation.getId(), e);
+            }
             throw e;
         } finally {
             em.close();

@@ -3,6 +3,7 @@ package com.example;
 import com.example.model.Reservation;
 import com.example.service.ReservationService;
 import javax.persistence.OptimisticLockException;
+import java.time.LocalDateTime;
 
 public class ReservationRetryHandler {
 
@@ -12,22 +13,26 @@ public class ReservationRetryHandler {
     public ReservationRetryHandler(ReservationService service) {
         this.service = service;
     }
-
     public Reservation modifierAvecRetry(Reservation reservation) {
-        int tentative = 0;
-        while (tentative < MAX_RETRIES) {
+        // On mémorise ce que l'utilisateur veut réellement modifier
+        final Long id = reservation.getId();
+        final String salleVoulue = reservation.getSalle();
+        final LocalDateTime debutVoulu = reservation.getDateDebut();
+        final LocalDateTime finVoulue = reservation.getDateFin();
+
+        Reservation courante = reservation;
+        for (int tentative = 1; tentative <= MAX_RETRIES; tentative++) {
             try {
-                return service.modifierReservation(reservation);
+                return service.modifierReservation(courante);
             } catch (OptimisticLockException e) {
-                tentative++;
                 System.out.println("Conflit détecté, tentative de retry " + tentative);
-                // Recharger la réservation pour obtenir la dernière version
-                reservation = service.trouverParId(reservation.getId());
-                // Appliquer les modifications nécessaires (exemple : réappliquer les changements)
-                // Ici on suppose que la modification est toujours la même
-                reservation.setSalle(reservation.getSalle());
+                courante = service.trouverParId(id);      // dernière version
+                courante.setSalle(salleVoulue);           // on réapplique le changement voulu
+                courante.setDateDebut(debutVoulu);
+                courante.setDateFin(finVoulue);
             }
         }
         throw new OptimisticLockException("Échec après " + MAX_RETRIES + " tentatives");
     }
+
 }
